@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
@@ -27,6 +28,27 @@ def train_transform():
     return transforms.Compose(transform_list)
 
 
+class FlatSubFolderDataset(data.Dataset):
+    def __init__(self, root, transform):
+        super(FlatSubFolderDataset, self).__init__()
+        self.root = root
+        self.paths = []
+        for d in os.listdir(self.root):
+            self.paths += [os.path.join(d, x) for x in os.listdir(os.path.join(self.root, d))]
+        self.transform = transform
+
+    def __getitem__(self, index):
+        path = self.paths[index]
+        img = Image.open(os.path.join(self.root, path)).convert('RGB')
+        img = self.transform(img)
+        return img
+
+    def __len__(self):
+        return len(self.paths)
+
+    def name(self):
+        return 'FlatSubFolderDataset'
+        
 class FlatFolderDataset(data.Dataset):
     def __init__(self, root, transform):
         super(FlatFolderDataset, self).__init__()
@@ -98,7 +120,7 @@ network.to(device)
 content_tf = train_transform()
 style_tf = train_transform()
 
-content_dataset = FlatFolderDataset(args.content_dir, content_tf)
+content_dataset = FlatSubFolderDataset(args.content_dir, content_tf)
 style_dataset = FlatFolderDataset(args.style_dir, style_tf)
 
 content_iter = iter(data.DataLoader(
@@ -113,6 +135,7 @@ style_iter = iter(data.DataLoader(
 optimizer = torch.optim.Adam(network.decoder.parameters(), lr=args.lr)
 
 for i in tqdm(range(args.max_iter)):
+    sys.stdout.flush() 
     adjust_learning_rate(optimizer, iteration_count=i)
     content_images = next(content_iter).to(device)
     style_images = next(style_iter).to(device)
